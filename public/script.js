@@ -52,10 +52,9 @@ async function searchDestinations() {
     return;
   }
 
-  const defaultFallbackImg = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=500';
+  const defaultFallbackImg = '/images/default_travel.jpg';
 
   data.forEach(item => {
-    // If photo missing or not added, skip item if required, or display clean image fallback
     const imgSrc = item.image || defaultFallbackImg;
     const card = document.createElement('div');
     card.className = 'card';
@@ -117,7 +116,6 @@ async function handleLogin(e) {
 
   const data = await res.json();
   if (res.ok) {
-    // Clear any previous user state before assigning new user
     clearUserState();
     currentUser = data.user;
     localStorage.setItem('currentUser', JSON.stringify(currentUser));
@@ -158,7 +156,6 @@ function clearUserState() {
   currentBookingItem = null;
   currentBookingId = null;
 
-  // Clear confidential payment & booking input data from DOM forms
   const paymentForm = document.getElementById('payment-form');
   if (paymentForm) paymentForm.reset();
 
@@ -171,9 +168,31 @@ function clearUserState() {
   const regForm = document.getElementById('register-form');
   if (regForm) regForm.reset();
 
-  // Clear bookings list container so confidential user data is not leaked
+  clearValidationErrors();
+
   const list = document.getElementById('bookings-list');
   if (list) list.innerHTML = '';
+}
+
+function clearValidationErrors() {
+  const dateError = document.getElementById('date-error');
+  if (dateError) {
+    dateError.textContent = '';
+    dateError.classList.add('hidden');
+  }
+  const cardError = document.getElementById('card-error');
+  if (cardError) {
+    cardError.textContent = '';
+    cardError.classList.add('hidden');
+  }
+  const expiryError = document.getElementById('expiry-error');
+  if (expiryError) {
+    expiryError.textContent = '';
+    expiryError.classList.add('hidden');
+  }
+
+  const inputs = document.querySelectorAll('input.input-error');
+  inputs.forEach(input => input.classList.remove('input-error'));
 }
 
 function logout() {
@@ -189,6 +208,15 @@ function logout() {
   showSection('home');
 }
 
+function getTomorrowDateStr() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const yyyy = tomorrow.getFullYear();
+  const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+  const dd = String(tomorrow.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function openBookingModal(item) {
   if (!currentUser) {
     alert('Please log in to book travel packages.');
@@ -197,6 +225,13 @@ function openBookingModal(item) {
   }
   currentBookingItem = item;
   document.getElementById('booking-item-title').textContent = `${item.title} (${item.type})`;
+
+  // Restrict HTML5 min date to tomorrow onwards
+  const dateInput = document.getElementById('book-date');
+  const tomorrowStr = getTomorrowDateStr();
+  dateInput.min = tomorrowStr;
+  
+  clearValidationErrors();
   calculateTotal();
   document.getElementById('booking-modal').style.display = 'flex';
 }
@@ -205,6 +240,7 @@ function closeBookingModal() {
   document.getElementById('booking-modal').style.display = 'none';
   const bookingForm = document.getElementById('booking-form');
   if (bookingForm) bookingForm.reset();
+  clearValidationErrors();
   currentBookingItem = null;
 }
 
@@ -214,11 +250,42 @@ function calculateTotal() {
   document.getElementById('book-total').textContent = total;
 }
 
+function validateBookingDate() {
+  const dateInput = document.getElementById('book-date');
+  const dateError = document.getElementById('date-error');
+  const selectedDateStr = dateInput.value;
+
+  dateInput.classList.remove('input-error');
+  dateError.classList.add('hidden');
+  dateError.textContent = '';
+
+  if (!selectedDateStr) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const selectedDate = new Date(selectedDateStr + 'T00:00:00');
+
+  // Must be strictly after today (i.e. selectedDate > today)
+  if (selectedDate <= today) {
+    dateInput.classList.add('input-error');
+    dateError.textContent = '❌ Error: Booking date must be after today\'s date!';
+    dateError.classList.remove('hidden');
+    return false;
+  }
+
+  return true;
+}
+
 async function confirmBooking(e) {
   e.preventDefault();
   if (!currentUser) {
     alert('Session expired. Please log in again.');
     openAuthModal();
+    return;
+  }
+
+  if (!validateBookingDate()) {
     return;
   }
 
@@ -250,6 +317,7 @@ async function confirmBooking(e) {
 
 function openPaymentModal(amount) {
   document.getElementById('pay-amount').textContent = amount;
+  clearValidationErrors();
   document.getElementById('payment-modal').style.display = 'flex';
 }
 
@@ -257,7 +325,72 @@ function closePaymentModal() {
   document.getElementById('payment-modal').style.display = 'none';
   const paymentForm = document.getElementById('payment-form');
   if (paymentForm) paymentForm.reset();
+  clearValidationErrors();
   currentBookingId = null;
+}
+
+function validatePaymentDetails() {
+  clearValidationErrors();
+  let isValid = true;
+
+  const cardInput = document.getElementById('pay-card');
+  const expiryInput = document.getElementById('pay-expiry');
+  const cvvInput = document.getElementById('pay-cvv');
+
+  const cardError = document.getElementById('card-error');
+  const expiryError = document.getElementById('expiry-error');
+
+  // Validate Card Number (16 digits)
+  const cardNumber = cardInput.value.replace(/\s+/g, '');
+  if (!/^\d{16}$/.test(cardNumber)) {
+    cardInput.classList.add('input-error');
+    cardError.textContent = '❌ Card number must be exactly 16 digits.';
+    cardError.classList.remove('hidden');
+    isValid = false;
+  }
+
+  // Validate Card Validity MM/YY (must be after current month & current year)
+  const expiryVal = expiryInput.value.trim();
+  const expiryMatch = expiryVal.match(/^(0[1-9]|1[0-2])\/([0-9]{2})$/);
+
+  if (!expiryMatch) {
+    expiryInput.classList.add('input-error');
+    expiryError.textContent = '❌ Invalid format! Please enter MM/YY (e.g. 10/26).';
+    expiryError.classList.remove('hidden');
+    isValid = false;
+  } else {
+    const expMonth = parseInt(expiryMatch[1], 10);
+    const expYearTwoDigits = parseInt(expiryMatch[2], 10);
+    const expFullYear = 2000 + expYearTwoDigits;
+
+    const now = new Date();
+    const currentFullYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1 to 12
+
+    // Validity MUST be strictly after the current month and current year
+    const isAfterCurrentMonthAndYear = (expFullYear > currentFullYear) ||
+      (expFullYear === currentFullYear && expMonth > currentMonth);
+
+    if (!isAfterCurrentMonthAndYear) {
+      expiryInput.classList.add('input-error');
+      expiryError.textContent = '❌ Error: Card validity must be AFTER current month and year!';
+      expiryError.classList.remove('hidden');
+      isValid = false;
+    }
+  }
+
+  // Validate CVV (3 digits)
+  const cvvVal = cvvInput.value.trim();
+  if (!/^\d{3}$/.test(cvvVal)) {
+    cvvInput.classList.add('input-error');
+    if (!expiryError.textContent) {
+      expiryError.textContent = '❌ CVV must be exactly 3 digits.';
+      expiryError.classList.remove('hidden');
+    }
+    isValid = false;
+  }
+
+  return isValid;
 }
 
 async function processPayment(e) {
@@ -265,6 +398,10 @@ async function processPayment(e) {
   if (!currentUser || !currentBookingId) {
     alert('Invalid transaction state. Please try booking again.');
     closePaymentModal();
+    return;
+  }
+
+  if (!validatePaymentDetails()) {
     return;
   }
 
@@ -279,9 +416,9 @@ async function processPayment(e) {
 
   const data = await res.json();
   if (res.ok) {
-    // Erase sensitive cardholder information and reset booking state
     const paymentForm = document.getElementById('payment-form');
     if (paymentForm) paymentForm.reset();
+    clearValidationErrors();
     currentBookingId = null;
     currentBookingItem = null;
 

@@ -77,8 +77,9 @@
       <p id="booking-item-title"></p>
       
       <form id="booking-form" onsubmit="confirmBooking(event)">
-        <label>Travel Date:</label>
-        <input type="date" id="book-date" required>
+        <label>Travel Date (Must be after today):</label>
+        <input type="date" id="book-date" onchange="validateBookingDate()" required>
+        <div id="date-error" class="error-msg hidden"></div>
         
         <label>Number of Guests:</label>
         <input type="number" id="book-guests" value="1" min="1" max="10" onchange="calculateTotal()" required>
@@ -96,12 +97,14 @@
       <p>Total Amount: ₹<span id="pay-amount">0</span></p>
 
       <form id="payment-form" onsubmit="processPayment(event)">
-        <input type="text" placeholder="Cardholder Name" required>
-        <input type="text" placeholder="Card Number (16 digits)" maxlength="16" required>
+        <input type="text" id="pay-name" placeholder="Cardholder Name" required>
+        <input type="text" id="pay-card" placeholder="Card Number (16 digits)" maxlength="16" required>
+        <div id="card-error" class="error-msg hidden"></div>
         <div class="row">
-          <input type="text" placeholder="MM/YY" maxlength="5" required>
-          <input type="password" placeholder="CVV" maxlength="3" required>
+          <input type="text" id="pay-expiry" placeholder="MM/YY (e.g. 10/26)" maxlength="5" required>
+          <input type="password" id="pay-cvv" placeholder="CVV" maxlength="3" required>
         </div>
+        <div id="expiry-error" class="error-msg hidden"></div>
         <button type="submit" class="pay-btn">Pay Now & Confirm</button>
       </form>
     </div>

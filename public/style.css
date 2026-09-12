@@ -41,7 +41,7 @@ nav button {
 }
 
 .hero {
-  background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=1200') center/cover;
+  background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('/images/hero_bg.jpg') center/cover;
   color: white;
   text-align: center;
   padding: 80px 20px;
@@ -226,6 +226,20 @@ form button {
 
 .hidden { display: none !important; }
 .pay-btn { background: #38a169; }
+
+.error-msg {
+  color: #e53e3e;
+  font-size: 13px;
+  margin-top: -4px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  display: block;
+}
+
+input.input-error {
+  border: 2px solid #e53e3e !important;
+  background-color: #fff5f5 !important;
+}
 
 footer {
   text-align: center;
