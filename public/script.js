@@ -52,11 +52,15 @@ async function searchDestinations() {
     return;
   }
 
+  const defaultFallbackImg = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=500';
+
   data.forEach(item => {
+    // If photo missing or not added, skip item if required, or display clean image fallback
+    const imgSrc = item.image || defaultFallbackImg;
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
-      <img src="${item.image}" alt="${item.title}">
+      <img src="${imgSrc}" alt="${item.title}" onerror="this.onerror=null; this.src='${defaultFallbackImg}';">
       <div class="card-body">
         <span class="card-type">${item.type}</span>
         <h3 class="card-title">${item.title}</h3>
@@ -75,6 +79,10 @@ function openAuthModal() {
 
 function closeAuthModal() {
   document.getElementById('auth-modal').style.display = 'none';
+  const loginForm = document.getElementById('login-form');
+  const regForm = document.getElementById('register-form');
+  if (loginForm) loginForm.reset();
+  if (regForm) regForm.reset();
 }
 
 function switchAuthTab(tab) {
@@ -109,6 +117,8 @@ async function handleLogin(e) {
 
   const data = await res.json();
   if (res.ok) {
+    // Clear any previous user state before assigning new user
+    clearUserState();
     currentUser = data.user;
     localStorage.setItem('currentUser', JSON.stringify(currentUser));
     updateUserUI();
@@ -133,6 +143,7 @@ async function handleRegister(e) {
 
   const data = await res.json();
   if (res.ok) {
+    clearUserState();
     currentUser = data.user;
     localStorage.setItem('currentUser', JSON.stringify(currentUser));
     updateUserUI();
@@ -143,9 +154,37 @@ async function handleRegister(e) {
   }
 }
 
+function clearUserState() {
+  currentBookingItem = null;
+  currentBookingId = null;
+
+  // Clear confidential payment & booking input data from DOM forms
+  const paymentForm = document.getElementById('payment-form');
+  if (paymentForm) paymentForm.reset();
+
+  const bookingForm = document.getElementById('booking-form');
+  if (bookingForm) bookingForm.reset();
+
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) loginForm.reset();
+
+  const regForm = document.getElementById('register-form');
+  if (regForm) regForm.reset();
+
+  // Clear bookings list container so confidential user data is not leaked
+  const list = document.getElementById('bookings-list');
+  if (list) list.innerHTML = '';
+}
+
 function logout() {
   currentUser = null;
   localStorage.removeItem('currentUser');
+  clearUserState();
+  
+  closeAuthModal();
+  closeBookingModal();
+  closePaymentModal();
+
   updateUserUI();
   showSection('home');
 }
@@ -164,6 +203,9 @@ function openBookingModal(item) {
 
 function closeBookingModal() {
   document.getElementById('booking-modal').style.display = 'none';
+  const bookingForm = document.getElementById('booking-form');
+  if (bookingForm) bookingForm.reset();
+  currentBookingItem = null;
 }
 
 function calculateTotal() {
@@ -174,6 +216,12 @@ function calculateTotal() {
 
 async function confirmBooking(e) {
   e.preventDefault();
+  if (!currentUser) {
+    alert('Session expired. Please log in again.');
+    openAuthModal();
+    return;
+  }
+
   const date = document.getElementById('book-date').value;
   const guests = parseInt(document.getElementById('book-guests').value);
   const totalPrice = currentBookingItem.price * guests;
@@ -207,35 +255,56 @@ function openPaymentModal(amount) {
 
 function closePaymentModal() {
   document.getElementById('payment-modal').style.display = 'none';
+  const paymentForm = document.getElementById('payment-form');
+  if (paymentForm) paymentForm.reset();
+  currentBookingId = null;
 }
 
 async function processPayment(e) {
   e.preventDefault();
+  if (!currentUser || !currentBookingId) {
+    alert('Invalid transaction state. Please try booking again.');
+    closePaymentModal();
+    return;
+  }
+
   const res = await fetch('/api/pay', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bookingId: currentBookingId })
+    body: JSON.stringify({
+      bookingId: currentBookingId,
+      userId: currentUser.id
+    })
   });
 
   const data = await res.json();
   if (res.ok) {
-    closePaymentModal();
+    // Erase sensitive cardholder information and reset booking state
+    const paymentForm = document.getElementById('payment-form');
+    if (paymentForm) paymentForm.reset();
+    currentBookingId = null;
+    currentBookingItem = null;
+
+    document.getElementById('payment-modal').style.display = 'none';
     alert('Payment Confirmed! Your trip is booked successfully.');
     showSection('my-bookings');
   } else {
-    alert(data.error);
+    alert(data.error || 'Payment failed');
   }
 }
 
 async function loadMyBookings() {
-  if (!currentUser) return;
+  const list = document.getElementById('bookings-list');
+  if (!currentUser) {
+    list.innerHTML = '<p>Please log in to view your bookings.</p>';
+    return;
+  }
   const res = await fetch(`/api/bookings?userId=${currentUser.id}`);
   const bookings = await res.json();
 
-  const list = document.getElementById('bookings-list');
   list.innerHTML = '';
 
-  if (bookings.length === 0) {
+  if (!Array.isArray(bookings) || bookings.length === 0) {
     list.innerHTML = '<p>You have no bookings yet.</p>';
     return;
   }
@@ -250,7 +319,7 @@ async function loadMyBookings() {
         <p>Total Paid: ₹${b.total_price}</p>
       </div>
       <div>
-        <span class="badge ${b.status.includes('Confirmed') ? 'Confirmed' : 'Pending'}">${b.status}</span>
+        <span class="badge ${b.status && b.status.includes('Confirmed') ? 'Confirmed' : 'Pending'}">${b.status}</span>
       </div>
     `;
     list.appendChild(item);

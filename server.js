@@ -72,9 +72,16 @@ app.get('/api/bookings', (req, res) => {
 });
 
 app.post('/api/pay', (req, res) => {
-  const { bookingId } = req.body;
-  db.run("UPDATE bookings SET status = 'Confirmed' WHERE id = ?", [bookingId], function(err) {
-    if (err) return res.status(500).json({ error: 'Payment failed' });
+  const { bookingId, userId } = req.body;
+  if (!bookingId || !userId) {
+    return res.status(400).json({ error: 'Missing booking or user identification' });
+  }
+
+  db.run("UPDATE bookings SET status = 'Confirmed' WHERE id = ? AND user_id = ?", [bookingId, userId], function(err) {
+    if (err) return res.status(500).json({ error: 'Payment failed due to database error' });
+    if (this.changes === 0) {
+      return res.status(403).json({ error: 'Payment unauthorized: Booking does not belong to the current user' });
+    }
     res.json({ success: true, message: 'Payment successful! Booking confirmed.' });
   });
 });
